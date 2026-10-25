@@ -1,11 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "proteomics-publication-pipeline",
-  "pages_build_output_dir": "dist",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-10-24",
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "assets": {
+    "directory": "./dist"
+  },
   "r2_buckets": [
     {
       "binding": "EPHEMERAL_MATRICES_BUCKET",
@@ -22,14 +25,6 @@
       "id": "e49281a1-9482-4f9e-8c33-102948102938"
     }
   ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "JOB_STATE_DO",
-        "class_name": "MarimoJobStateDO"
-      }
-    ]
-  },
   "vars": {
     "ENVIRONMENT": "production",
     "PIPELINE_VERSION": "PROT-001-V1"
