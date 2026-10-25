@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "proteomics-publication-pipeline",
+  "pages_build_output_dir": "dist",
+  "compatibility_date": "2026-10-24",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "r2_buckets": [
+    {
+      "binding": "EPHEMERAL_MATRICES_BUCKET",
+      "bucket_name": "proteomics-matrices-ephemeral"
+    },
+    {
+      "binding": "DURABLE_MANUSCRIPTS_BUCKET",
+      "bucket_name": "proteomics-manuscripts-durable"
+    }
+  ],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE_METADATA_INDEX",
+      "id": "e49281a1-9482-4f9e-8c33-102948102938"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "JOB_STATE_DO",
+        "class_name": "MarimoJobStateDO"
+      }
+    ]
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "PIPELINE_VERSION": "PROT-001-V1"
+  }
+}
