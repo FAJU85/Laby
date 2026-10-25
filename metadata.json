@@ -1,0 +1,6 @@
+{
+  "name": "Proteomics Publication Pipeline (PROT-001)",
+  "description": "Cloudflare-native publication platform for MS proteomics intensity matrices, guided statistics, vector figure export, Methods generation, journal compliance checking, and manuscript proofreading.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
