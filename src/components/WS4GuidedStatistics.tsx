@@ -9,7 +9,7 @@ import {
   FDRCorrectionMethod,
   ProvenanceManifest
 } from '../types/proteomics';
-import { runDifferentialExpression, computeQuickHash, computePCA } from '../utils/mathStats';
+import { runDifferentialExpression, computeReproducibilityHash, formatPValue } from '../utils/mathStats';
 import { Sliders, Play, CheckCircle2, RotateCcw, Filter, Search, ShieldCheck, ArrowUpDown } from 'lucide-react';
 
 interface WS4Props {
@@ -52,11 +52,10 @@ export const WS4GuidedStatistics: React.FC<WS4Props> = ({
       const sigUp = calculatedResults.filter(r => r.regulation === 'up').length;
       const sigDown = calculatedResults.filter(r => r.regulation === 'down').length;
 
-      const paramString = JSON.stringify({ config, matrixHash: matrix.sha256Checksum });
-      const reproHash = computeQuickHash(paramString);
+      const reproHash = computeReproducibilityHash(config, matrix.sha256Checksum);
 
       const newManifest: ProvenanceManifest = {
-        pipelineVersion: 'Proteomics Pipeline v1.0.0 (Cloudflare WASM)',
+        pipelineVersion: 'Proteomics Pipeline v1.1.0',
         reproducibilityHash: reproHash,
         timestamp: new Date().toISOString(),
         datasetName: matrix.filename,
@@ -91,12 +90,16 @@ export const WS4GuidedStatistics: React.FC<WS4Props> = ({
       r.description.toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
+      const valA = a[sortField];
+      const valB = b[sortField];
       if (typeof valA === 'string') {
-        return sortAsc ? (valA as string).localeCompare(valB as string) : (valB as string).localeCompare(valA as string);
+        return sortAsc ? valA.localeCompare(valB as string) : (valB as string).localeCompare(valA);
       }
-      return sortAsc ? (valA as number) - (valB as number) : (valB as number) - (valA as number);
+      // Untestable proteins (NaN) always sort last
+      const numA = valA as number;
+      const numB = valB as number;
+      if (Number.isNaN(numA) || Number.isNaN(numB)) return Number(Number.isNaN(numA)) - Number(Number.isNaN(numB));
+      return sortAsc ? numA - numB : numB - numA;
     });
 
   return (
@@ -182,7 +185,7 @@ export const WS4GuidedStatistics: React.FC<WS4Props> = ({
                   onChange={(e) => setConfig({ ...config, log2Transform: e.target.checked })}
                   className="rounded text-teal-600 focus:ring-teal-500"
                 />
-                <span>Apply Log2 Transformation: log2(x + 1)</span>
+                <span>Apply Log2 Transformation: log2(x)</span>
               </label>
             </div>
 
@@ -208,11 +211,12 @@ export const WS4GuidedStatistics: React.FC<WS4Props> = ({
                 onChange={(e) => setConfig({ ...config, imputation: e.target.value as ImputationMethod })}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-900 focus:ring-2 focus:ring-teal-500"
               >
-                <option value="mindet_lod font-medium">LOD / MinDet (Limit of Detection Draw)</option>
+                <option value="mindet_lod">Down-shifted Normal (MinDet / LOD Draw)</option>
                 <option value="knn">KNN (K-Nearest Neighbors)</option>
                 <option value="median">Protein Median Imputation</option>
                 <option value="zero">Zero Filling</option>
-                <option value="none">None</option>
+                <option value="drop">Drop Proteins with Missing Values</option>
+                <option value="none">None (Test Observed Values Only)</option>
               </select>
             </div>
           </div>
@@ -359,7 +363,7 @@ export const WS4GuidedStatistics: React.FC<WS4Props> = ({
                   </td>
                   <td className="py-2.5 px-3 text-right text-slate-700">{row.foldChangeRatio.toFixed(2)}x</td>
                   <td className="py-2.5 px-3 text-right font-semibold text-slate-900">
-                    {row.adjPValue < 0.001 ? '< 0.001' : row.adjPValue.toFixed(4)}
+                    {formatPValue(row.adjPValue)}
                   </td>
                   <td className="py-2.5 px-3 text-center">
                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${

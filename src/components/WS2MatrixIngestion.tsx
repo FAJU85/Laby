@@ -73,7 +73,7 @@ export const WS2MatrixIngestion: React.FC<WS2Props> = ({ currentMatrix, onSelect
           const rawVal = parseFloat(cols[sIdx + 2]);
           if (isNaN(rawVal) || cols[sIdx + 2] === '' || cols[sIdx + 2] === 'NA') {
             missingCount++;
-            intensities[sid] = 0;
+            intensities[sid] = NaN;
           } else if (rawVal === 0) {
             zeroCount++;
             intensities[sid] = 0;
@@ -309,7 +309,7 @@ export const WS2MatrixIngestion: React.FC<WS2Props> = ({ currentMatrix, onSelect
                   <td className="py-2 px-3 text-slate-900 font-semibold">{p.geneSymbol}</td>
                   {currentMatrix.samples.map(s => (
                     <td key={s.sampleId} className="py-2 px-3 text-right text-slate-800">
-                      {p.intensities[s.sampleId]?.toLocaleString() || '0'}
+                      {Number.isFinite(p.intensities[s.sampleId]) ? p.intensities[s.sampleId].toLocaleString() : 'NA'}
                     </td>
                   ))}
                 </tr>

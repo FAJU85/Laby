@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { StatResultRow, JournalPresetName, ProvenanceManifest, JournalComplianceAudit } from '../types/proteomics';
+import { formatPValue } from './mathStats';
 
 // Downloads an SVG string directly as an editable vector file (.svg)
 export function downloadSVG(svgElement: SVGSVGElement | null, filename: string) {
@@ -80,11 +81,11 @@ export function generatePublicationPDF(
         doc.text('Gene Symbol   UniProt      log2FC    adj. p-value   Regulation', 15, 186);
         doc.line(15, 188, 195, 188);
 
-        const topProts = stats.filter(s => s.isSignificant).slice(0, 8);
+        const topProts = stats.filter(s => s.isSignificant).sort((a, b) => a.adjPValue - b.adjPValue).slice(0, 8);
         let y = 194;
         topProts.forEach(p => {
           doc.text(
-            `${p.geneSymbol.padEnd(12)}  ${p.accession.padEnd(10)}   ${p.log2FC > 0 ? '+' : ''}${p.log2FC.toFixed(2)}      ${p.adjPValue < 0.001 ? '<0.001' : p.adjPValue.toFixed(4)}         ${p.regulation.toUpperCase()}`,
+            `${p.geneSymbol.padEnd(12)}  ${p.accession.padEnd(10)}   ${p.log2FC > 0 ? '+' : ''}${p.log2FC.toFixed(2)}      ${formatPValue(p.adjPValue)}         ${p.regulation.toUpperCase()}`,
             15,
             y
           );

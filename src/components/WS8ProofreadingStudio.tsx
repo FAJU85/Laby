@@ -48,7 +48,12 @@ export const WS8ProofreadingStudio: React.FC<WS8Props> = ({ stats, matrix }) => 
   const handleRunProofread = async () => {
     setAnalyzing(true);
 
-    const topProteins = stats.slice(0, 5).map(s => ({
+    // Most significant testable proteins; NaN p-values would serialize as null
+    const topProteins = stats
+      .filter(s => Number.isFinite(s.adjPValue) && Number.isFinite(s.log2FC))
+      .sort((a, b) => a.adjPValue - b.adjPValue)
+      .slice(0, 5)
+      .map(s => ({
       geneSymbol: s.geneSymbol,
       accession: s.accession,
       log2FC: s.log2FC,

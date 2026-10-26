@@ -6,6 +6,7 @@ import {
   JournalComplianceAudit
 } from '../types/proteomics';
 import { generateMethodsSummaryPDF } from '../utils/exportVector';
+import { describeStatTest } from '../utils/mathStats';
 import { FileText, Download, CheckCircle2, Copy, RefreshCw, ShieldCheck, Code, Edit3 } from 'lucide-react';
 
 interface WS6Props {
@@ -23,14 +24,16 @@ export const WS6MethodsGenerator: React.FC<WS6Props> = ({ manifest, config, matr
 
   // Auto-generate Materials & Methods text based on parameters
   const generateMethodsText = () => {
-    const softwareVer = 'Proteomics Publication Pipeline (PROT-001, v1.0.0)';
+    const softwareVer = 'Proteomics Publication Pipeline (PROT-001, v1.1.0)';
+    const testName = describeStatTest(config);
+    const transformText = config.log2Transform ? 'log2-transformed and ' : '';
     const dbRef = 'UniProtKB Human Canonical Proteome (release 2026_01)';
 
     if (format === 'latex') {
       return `\\subsection*{Materials and Methods: Mass Spectrometry Data Processing}
 Processed mass spectrometry intensity matrices (${matrix.filename}, SHA-256: \\texttt{${matrix.sha256Checksum.slice(0, 12)}...}) were analyzed using \\texttt{${softwareVer}}. High-resolution intensity values were normalized via \\textbf{${config.normalization}} and missing quantitative signals were imputed using \\textbf{${config.imputation}}.
 
-Differential protein expression between \\textbf{${config.groupA}} ($n = ${matrix.samples.filter(s => s.condition === config.groupA).length}$) and \\textbf{${config.groupB}} ($n = ${matrix.samples.filter(s => s.condition === config.groupB).length}$) was calculated using a two-tailed \\textbf{${config.statTest.replace('_', ' ')}} statistical test. Multiple hypothesis testing was adjusted using the \\textbf{${config.fdrCorrection.replace('_', ' ')}} false discovery rate (FDR) procedure. Proteins meeting an adjusted $q$-value cutoff of $q < ${config.pCutoff}$ and absolute fold change $|\\log_2\\text{FC}| \\ge ${config.log2FCCutoff}$ were designated as significantly regulated. All parameters were verified via reproducible manifest hash \\texttt{${manifest?.reproducibilityHash || 'PROT-HASH-2026'}}.`;
+Differential protein expression between \\textbf{${config.groupA}} ($n = ${matrix.samples.filter(s => s.condition === config.groupA).length}$) and \\textbf{${config.groupB}} ($n = ${matrix.samples.filter(s => s.condition === config.groupB).length}$) was calculated using a \\textbf{${testName}}. Multiple hypothesis testing was adjusted using the \\textbf{${config.fdrCorrection.replace('_', ' ')}} false discovery rate (FDR) procedure. Proteins meeting an adjusted $q$-value cutoff of $q < ${config.pCutoff}$ and absolute fold change $|\\log_2\\text{FC}| \\ge ${config.log2FCCutoff}$ were designated as significantly regulated. All parameters were verified via reproducible manifest hash \\texttt{${manifest?.reproducibilityHash || 'PROT-HASH-2026'}}.`;
     }
 
     if (format === 'markdown') {
@@ -38,8 +41,8 @@ Differential protein expression between \\textbf{${config.groupA}} ($n = ${matri
 
 Mass spectrometry quantitative intensity matrices (**${matrix.filename}**, SHA-256 checksum: \`${matrix.sha256Checksum.slice(0, 16)}...\`) were processed using **${softwareVer}**.
 
-1. **Preprocessing & Normalization**: Protein intensities were transformed via **Log2** and normalized using **${config.normalization}**. Missing intensity values were handled using **${config.imputation}**.
-2. **Statistical Testing**: Differential expression between **${config.groupA}** (n = ${matrix.samples.filter(s => s.condition === config.groupA).length}) and **${config.groupB}** (n = ${matrix.samples.filter(s => s.condition === config.groupB).length}) was evaluated using **${config.statTest.replace('_', ' ')}**.
+1. **Preprocessing & Normalization**: Protein intensities were ${transformText}normalized using **${config.normalization}**. Missing intensity values were handled using **${config.imputation}**.
+2. **Statistical Testing**: Differential expression between **${config.groupA}** (n = ${matrix.samples.filter(s => s.condition === config.groupA).length}) and **${config.groupB}** (n = ${matrix.samples.filter(s => s.condition === config.groupB).length}) was evaluated using a **${testName}**.
 3. **Multiple Testing Correction**: False discovery rates were calculated using **${config.fdrCorrection.replace('_', ' ')}**. Proteins with an adjusted $q$-value $< ${config.pCutoff}$ and $|\log_2\text{FC}| \ge ${config.log2FCCutoff}$ were classified as significantly regulated.
 4. **Reproducibility**: Parameter provenance recorded in JSON manifest with SHA-256 hash \`${manifest?.reproducibilityHash}\`.`;
     }
@@ -48,7 +51,7 @@ Mass spectrometry quantitative intensity matrices (**${matrix.filename}**, SHA-2
 
 Quantitative mass spectrometry intensity matrices (${matrix.filename}, SHA-256: ${matrix.sha256Checksum.slice(0, 16)}...) were processed using ${softwareVer}.
 
-Protein intensity values were log2-transformed and normalized using ${config.normalization.toUpperCase()}. Missing quantitative values were imputed using ${config.imputation.toUpperCase()}. Differential expression between ${config.groupA} (n = ${matrix.samples.filter(s => s.condition === config.groupA).length}) and ${config.groupB} (n = ${matrix.samples.filter(s => s.condition === config.groupB).length}) was calculated using a two-tailed ${config.statTest.replace('_', ' ')}. Multiple testing correction was performed via ${config.fdrCorrection.replace('_', ' ')} (q < ${config.pCutoff}, |log2FC| >= ${config.log2FCCutoff}). All parameter logs and data provenance are recorded under reproducibility hash: ${manifest?.reproducibilityHash}.`;
+Protein intensity values were ${transformText}normalized using ${config.normalization.toUpperCase()}. Missing quantitative values were imputed using ${config.imputation.toUpperCase()}. Differential expression between ${config.groupA} (n = ${matrix.samples.filter(s => s.condition === config.groupA).length}) and ${config.groupB} (n = ${matrix.samples.filter(s => s.condition === config.groupB).length}) was calculated using a ${testName}. Multiple testing correction was performed via ${config.fdrCorrection.replace('_', ' ')} (q < ${config.pCutoff}, |log2FC| >= ${config.log2FCCutoff}). All parameter logs and data provenance are recorded under reproducibility hash: ${manifest?.reproducibilityHash}.`;
   };
 
   const [methodsText, setMethodsText] = useState<string>(generateMethodsText());

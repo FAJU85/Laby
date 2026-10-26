@@ -16,7 +16,7 @@ import {
   PlatformAuditLog
 } from './types/proteomics';
 import { HeLaPresetMatrix } from './data/presets';
-import { runDifferentialExpression, computeQuickHash } from './utils/mathStats';
+import { runDifferentialExpression, computeReproducibilityHash } from './utils/mathStats';
 import { TopBar } from './components/TopBar';
 import { WS1WorkspaceAccess } from './components/WS1WorkspaceAccess';
 import { WS2MatrixIngestion } from './components/WS2MatrixIngestion';
@@ -50,7 +50,7 @@ export default function App() {
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('local');
 
   // WS4: Experiment Design Config
-  const [config, setConfig] = useState<ExperimentDesignConfig>({
+  const initialConfig: ExperimentDesignConfig = {
     groupFactor: 'Condition',
     groupA: 'Drug_Treated',
     groupB: 'Control',
@@ -63,46 +63,31 @@ export default function App() {
     fdrCorrection: 'benjamini_hochberg',
     pCutoff: 0.05,
     log2FCCutoff: 1.0,
-  });
+  };
+  const [config, setConfig] = useState<ExperimentDesignConfig>(initialConfig);
 
   // Initial calculated statistics results
   const [results, setResults] = useState<StatResultRow[]>(() =>
-    runDifferentialExpression(HeLaPresetMatrix.proteins, HeLaPresetMatrix.samples, {
-      groupFactor: 'Condition',
-      groupA: 'Drug_Treated',
-      groupB: 'Control',
-      paired: false,
-      referenceLevel: 'Control',
-      log2Transform: true,
-      normalization: 'median',
-      imputation: 'mindet_lod',
-      statTest: 'welch_ttest',
-      fdrCorrection: 'benjamini_hochberg',
-      pCutoff: 0.05,
-      log2FCCutoff: 1.0,
-    })
+    runDifferentialExpression(HeLaPresetMatrix.proteins, HeLaPresetMatrix.samples, initialConfig)
   );
 
   // WS6: Provenance Manifest State
-  const [manifest, setManifest] = useState<ProvenanceManifest | null>(() => {
-    const reproHash = computeQuickHash(JSON.stringify({ config, matrixHash: HeLaPresetMatrix.sha256Checksum }));
-    return {
-      pipelineVersion: 'Proteomics Pipeline v1.0.0 (Cloudflare WASM)',
-      reproducibilityHash: reproHash,
-      timestamp: new Date().toISOString(),
-      datasetName: HeLaPresetMatrix.filename,
-      datasetChecksum: HeLaPresetMatrix.sha256Checksum,
-      executionMode: 'local',
-      parameters: config,
-      summaryStats: {
-        totalProteinsTested: HeLaPresetMatrix.proteins.length,
-        significantUpCount: 12,
-        significantDownCount: 8,
-        fdrThreshold: 0.05,
-        log2FCThreshold: 1.0,
-      },
-    };
-  });
+  const [manifest, setManifest] = useState<ProvenanceManifest | null>(() => ({
+    pipelineVersion: 'Proteomics Pipeline v1.1.0',
+    reproducibilityHash: computeReproducibilityHash(initialConfig, HeLaPresetMatrix.sha256Checksum),
+    timestamp: new Date().toISOString(),
+    datasetName: HeLaPresetMatrix.filename,
+    datasetChecksum: HeLaPresetMatrix.sha256Checksum,
+    executionMode: 'local',
+    parameters: initialConfig,
+    summaryStats: {
+      totalProteinsTested: results.length,
+      significantUpCount: results.filter(r => r.regulation === 'up').length,
+      significantDownCount: results.filter(r => r.regulation === 'down').length,
+      fdrThreshold: initialConfig.pCutoff,
+      log2FCThreshold: initialConfig.log2FCCutoff,
+    },
+  }));
 
   // WS7: Journal Compliance Audit State
   const [compliance, setCompliance] = useState<JournalComplianceAudit>({
@@ -166,7 +151,7 @@ export default function App() {
       actor: 'pi.oncology@lab.org',
       action: 'LOAD_PRESET_MATRIX',
       status: 'SUCCESS',
-      details: 'Loaded HeLa_Proteomics_TMT16plex_Matrix.csv (2,500 proteins)',
+      details: `Loaded ${HeLaPresetMatrix.filename} (${HeLaPresetMatrix.proteins.length} proteins)`,
     },
     {
       id: 'log-2',
@@ -175,7 +160,7 @@ export default function App() {
       actor: 'pi.oncology@lab.org',
       action: 'RUN_GUIDED_STATS',
       status: 'SUCCESS',
-      details: 'Welch t-test + Benjamini-Hochberg FDR executed on WASM worker thread',
+      details: 'Welch t-test + Benjamini-Hochberg FDR executed in the browser',
     },
     {
       id: 'log-3',
@@ -262,7 +247,7 @@ export default function App() {
 
         {/* WS5: Vector Figures & Publication Export */}
         {activeTab === 'figures' && (
-          <WS5VisualizationExport matrix={matrix} stats={results} />
+          <WS5VisualizationExport matrix={matrix} stats={results} config={config} />
         )}
 
         {/* WS6: Methods Generator & Manifest */}

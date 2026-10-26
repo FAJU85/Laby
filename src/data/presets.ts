@@ -1,23 +1,40 @@
 import { IntensityMatrix, SampleMetadata, ProteinRow } from '../types/proteomics';
+import { sha256Hex } from '../utils/sha256';
+import { createRng, hashSeed, normalDraw } from '../utils/random';
 
-// Helper to build preset intensity matrices
+// Canonical CSV serialization (Accession, GeneSymbol, one column per sample); missing values as NA
+export function serializeMatrixCSV(proteins: ProteinRow[], samples: SampleMetadata[]): string {
+  const header = ['Accession', 'GeneSymbol', ...samples.map(s => s.sampleId)].join(',');
+  const rows = proteins.map(p =>
+    [
+      p.accession,
+      p.geneSymbol,
+      ...samples.map(s => {
+        const v = p.intensities[s.sampleId];
+        return Number.isFinite(v) ? String(v) : 'NA';
+      }),
+    ].join(',')
+  );
+  return [header, ...rows].join('\n') + '\n';
+}
+
+// Helper to build simulated preset intensity matrices. Noise is drawn from a PRNG seeded by
+// the filename, so presets (and their checksums) are identical on every load.
 function createPresetMatrix(
   id: string,
   filename: string,
-  sha256Checksum: string,
-  fileSizeBytes: number,
   samples: SampleMetadata[],
   proteinDefs: Array<{ accession: string; geneSymbol: string; description: string; baseControl: number; baseTreatedRatio: number }>
 ): IntensityMatrix {
+  const rng = createRng(hashSeed(filename));
   const proteins: ProteinRow[] = proteinDefs.map(def => {
     const intensities: Record<string, number> = {};
     samples.forEach(s => {
-      // Add realistic biological replicate variation
+      // Log-normal biological replicate variation (~10% CV)
       const isTreatment = s.condition.includes('Treated') || s.condition.includes('Cancer') || s.condition.includes('24h');
       const ratio = isTreatment ? def.baseTreatedRatio : 1.0;
-      const noise = (Math.sin(s.replicate * 1.7) * 0.1) + ((Math.random() - 0.5) * 0.15);
-      const intensity = Math.max(1, Math.round(def.baseControl * ratio * (1 + noise)));
-      intensities[s.sampleId] = intensity;
+      const noise = Math.exp(0.1 * normalDraw(rng));
+      intensities[s.sampleId] = Math.max(1, Math.round(def.baseControl * ratio * noise));
     });
 
     return {
@@ -28,22 +45,26 @@ function createPresetMatrix(
     };
   });
 
+  const csv = serializeMatrixCSV(proteins, samples);
+  const cells = proteins.flatMap(p => samples.map(s => p.intensities[s.sampleId]));
+  const missing = cells.filter(v => !Number.isFinite(v)).length;
+
   return {
     id,
     filename,
-    sha256Checksum,
-    fileSizeBytes,
+    sha256Checksum: sha256Hex(csv),
+    fileSizeBytes: new TextEncoder().encode(csv).length,
     uploadedAt: new Date().toISOString().split('T')[0],
     samples,
     proteins,
     totalProteinsCount: proteins.length,
-    missingValuePercentage: 2.4,
-    zeroIntensityCount: 18,
+    missingValuePercentage: cells.length ? Number(((missing / cells.length) * 100).toFixed(1)) : 0,
+    zeroIntensityCount: cells.filter(v => v === 0).length,
     schemaValidationStatus: 'valid',
     validationMessages: [
+      'Simulated demonstration dataset: intensities are generated, not measured.',
       'Schema Check Passed: All sample IDs match design matrix columns.',
-      'Intensity Range: Positive quantitative MS signals detected (1.0e2 - 4.5e8).',
-      'UniProt Accessions: Validated against UniProtKB Human release 2026_01.'
+      'SHA-256 checksum computed over the canonical CSV serialization of this matrix.'
     ]
   };
 }
@@ -86,8 +107,6 @@ const HeLaProteins = [
 export const HeLaPresetMatrix = createPresetMatrix(
   'preset-hela-tmt',
   'HeLa_Proteomics_TMT16plex_Matrix.csv',
-  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-  482100,
   HeLaSamples,
   HeLaProteins
 );
@@ -120,8 +139,6 @@ const PlasmaProteins = [
 export const PlasmaPresetMatrix = createPresetMatrix(
   'preset-plasma-biomarker',
   'Plasma_Biomarker_Cohort_Matrix.tsv',
-  '8f91807d9c670b86a877521c7d2e0f4f93282f1b41e8e2b83c270d4f3e2b10a9',
-  315000,
   PlasmaSamples,
   PlasmaProteins
 );
@@ -147,8 +164,6 @@ const PhosphoProteins = [
 export const PhosphoPresetMatrix = createPresetMatrix(
   'preset-phospho-timecourse',
   'Phosphoproteomics_Kinase_Inhibitor_Matrix.csv',
-  'c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2',
-  210000,
   PhosphoSamples,
   PhosphoProteins
 );
@@ -157,7 +172,7 @@ export const PRESET_DATASETS = [
   {
     id: HeLaPresetMatrix.id,
     title: 'HeLa Cell Line TMT Proteomics',
-    subtitle: 'Drug Treated vs Control (4x4 Replicates, 2,500 Proteins)',
+    subtitle: 'Drug Treated vs Control (4x4 Replicates, 20 Proteins)',
     matrix: HeLaPresetMatrix
   },
   {
