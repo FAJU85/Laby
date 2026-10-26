@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   StatResultRow,
   IntensityMatrix,
@@ -53,8 +53,16 @@ export const WS5VisualizationExport: React.FC<WS5Props> = ({ matrix, stats, conf
   const currentJournalPreset = JOURNAL_PRESETS[selectedJournal];
 
   // PCA and correlation run on the same preprocessed (log2 / normalized / imputed) matrix as the statistics
-  const pcaResult = computePCA(matrix.proteins, matrix.samples, config);
-  const correlationData = computeSampleCorrelation(matrix.proteins, matrix.samples, config);
+  // (memoized: preprocessing with KNN imputation is quadratic in the number of proteins)
+  const { log2Transform, normalization, imputation } = config;
+  const pcaResult = useMemo(
+    () => computePCA(matrix.proteins, matrix.samples, { log2Transform, normalization, imputation }),
+    [matrix, log2Transform, normalization, imputation]
+  );
+  const correlationData = useMemo(
+    () => computeSampleCorrelation(matrix.proteins, matrix.samples, { log2Transform, normalization, imputation }),
+    [matrix, log2Transform, normalization, imputation]
+  );
 
   // Scale PCA scores to fit the 540 x 340 plotting area around (330, 210)
   const pcaMaxAbs = Math.max(
