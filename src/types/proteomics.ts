@@ -30,8 +30,7 @@ export interface ProteinRow {
   accession: string; // e.g. "P04637"
   geneSymbol: string; // e.g. "TP53"
   description: string; // e.g. "Cellular tumor antigen p53"
-  intensities: Record<string, number>; // sampleId -> raw / transformed intensity value
-  isImputed?: Record<string, boolean>; // sampleId -> boolean
+  intensities: Record<string, number>; // sampleId -> raw intensity; NaN marks a missing value
 }
 
 export interface IntensityMatrix {
@@ -77,13 +76,13 @@ export interface StatResultRow {
   meanGroupB: number;
   log2FC: number; // log2(GroupA) - log2(GroupB)
   foldChangeRatio: number; // 2^(log2FC)
-  pValue: number;
-  adjPValue: number;
-  negLog10AdjPValue: number;
-  statisticValue: number;
+  pValue: number; // NaN when the protein cannot be tested (e.g. too few observations)
+  adjPValue: number; // NaN when untestable
+  negLog10AdjPValue: number; // 0 when untestable
+  statisticValue: number; // t, U, W or F depending on the test
   isSignificant: boolean;
   regulation: 'up' | 'down' | 'neutral';
-  intensitiesGroupA: number[];
+  intensitiesGroupA: number[]; // preprocessed values per group A sample; NaN if missing
   intensitiesGroupB: number[];
 }
 
@@ -98,6 +97,7 @@ export interface PCAResult {
   points: PCAPoint[];
   varExplainedPC1: number; // e.g. 48.2%
   varExplainedPC2: number; // e.g. 21.5%
+  proteinsUsed: number; // proteins with no missing values after preprocessing
 }
 
 export type ColorPaletteName = 'nature' | 'cell' | 'science' | 'viridis' | 'magma';

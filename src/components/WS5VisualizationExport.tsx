@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   StatResultRow,
   IntensityMatrix,
   JournalPresetName,
   ColorPaletteName,
-  JournalPreset
+  JournalPreset,
+  ExperimentDesignConfig
 } from '../types/proteomics';
 import { computePCA, computeSampleCorrelation } from '../utils/mathStats';
 import { downloadSVG, generatePublicationPDF } from '../utils/exportVector';
@@ -13,6 +14,7 @@ import { LineChart, Download, FileText, Sliders, Palette, ZoomIn, ZoomOut, Refre
 interface WS5Props {
   matrix: IntensityMatrix;
   stats: StatResultRow[];
+  config: ExperimentDesignConfig;
 }
 
 const JOURNAL_PRESETS: Record<JournalPresetName, JournalPreset> = {
@@ -24,7 +26,7 @@ const JOURNAL_PRESETS: Record<JournalPresetName, JournalPreset> = {
   Oxford: { name: 'Oxford', columnWidthMm: 88, fontFamily: 'Times New Roman, serif', recommendedDpi: 300, maxFontSizePt: 9, minFontSizePt: 6 },
 };
 
-export const WS5VisualizationExport: React.FC<WS5Props> = ({ matrix, stats }) => {
+export const WS5VisualizationExport: React.FC<WS5Props> = ({ matrix, stats, config }) => {
   const [activePlotTab, setActivePlotTab] = useState<'volcano' | 'pca' | 'heatmap' | 'box' | 'correlation'>('volcano');
   const [selectedJournal, setSelectedJournal] = useState<JournalPresetName>('Nature');
   const [palette, setPalette] = useState<ColorPaletteName>('nature');
@@ -50,11 +52,28 @@ export const WS5VisualizationExport: React.FC<WS5Props> = ({ matrix, stats }) =>
   const colors = getPaletteColors();
   const currentJournalPreset = JOURNAL_PRESETS[selectedJournal];
 
-  // PCA calculation
-  const pcaResult = computePCA(matrix.proteins, matrix.samples);
+  // PCA and correlation run on the same preprocessed (log2 / normalized / imputed) matrix as the statistics
+  // (memoized: preprocessing with KNN imputation is quadratic in the number of proteins)
+  const { log2Transform, normalization, imputation } = config;
+  const pcaResult = useMemo(
+    () => computePCA(matrix.proteins, matrix.samples, { log2Transform, normalization, imputation }),
+    [matrix, log2Transform, normalization, imputation]
+  );
+  const correlationData = useMemo(
+    () => computeSampleCorrelation(matrix.proteins, matrix.samples, { log2Transform, normalization, imputation }),
+    [matrix, log2Transform, normalization, imputation]
+  );
 
-  // Correlation matrix
-  const correlationData = computeSampleCorrelation(matrix.proteins, matrix.samples);
+  // Scale PCA scores to fit the 540 x 340 plotting area around (330, 210)
+  const pcaMaxAbs = Math.max(
+    1e-9,
+    ...pcaResult.points.flatMap(pt => [Math.abs(pt.pc1), Math.abs(pt.pc2)])
+  );
+  const pcaScaleX = 240 / pcaMaxAbs;
+  const pcaScaleY = 150 / pcaMaxAbs;
+  const pcaConditions = Array.from(new Set(matrix.samples.map(s => s.condition)));
+  const pcaConditionColor = (condition: string) =>
+    condition === config.groupA ? colors.up : condition === config.groupB ? colors.down : colors.neutral;
 
   // Export handlers
   const handleExportSVG = () => {
@@ -254,11 +273,10 @@ export const WS5VisualizationExport: React.FC<WS5Props> = ({ matrix, stats }) =>
                 PC2 ({pcaResult.varExplainedPC2}% Variance)
               </text>
 
-              {pcaResult.points.map((pt, idx) => {
-                const cx = 330 + pt.pc1 * 8;
-                const cy = 210 - pt.pc2 * 8;
-                const isGroupA = idx < pcaResult.points.length / 2;
-                const color = isGroupA ? colors.up : colors.down;
+              {pcaResult.points.map((pt) => {
+                const cx = 330 + pt.pc1 * pcaScaleX;
+                const cy = 210 - pt.pc2 * pcaScaleY;
+                const color = pcaConditionColor(pt.condition);
 
                 return (
                   <g key={pt.sampleId}>
@@ -269,6 +287,17 @@ export const WS5VisualizationExport: React.FC<WS5Props> = ({ matrix, stats }) =>
                   </g>
                 );
               })}
+
+              {/* Legend */}
+              {pcaConditions.map((condition, idx) => (
+                <g key={condition}>
+                  <circle cx={480} cy={56 + idx * 16} r="5" fill={pcaConditionColor(condition)} />
+                  <text x={490} y={60 + idx * 16} fontSize="9" fill="#0F172A">{condition}</text>
+                </g>
+              ))}
+              <text x={60} y={30} fontSize="9" fill="#64748B">
+                {pcaResult.proteinsUsed} proteins without missing values after preprocessing
+              </text>
             </svg>
           )}
 
@@ -378,9 +407,9 @@ export const WS5VisualizationExport: React.FC<WS5Props> = ({ matrix, stats }) =>
                       const x = 140 + cIdx * 45;
                       return (
                         <g key={cIdx}>
-                          <rect x={x} y={y} width="40" height="35" fill="#0D9488" opacity={coef} rx="2" />
-                          <text x={x + 20} y={y + 22} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#FFFFFF">
-                            {coef.toFixed(2)}
+                          <rect x={x} y={y} width="40" height="35" fill="#0D9488" opacity={Number.isFinite(coef) ? Math.max(0, coef) : 0.1} rx="2" />
+                          <text x={x + 20} y={y + 22} textAnchor="middle" fontSize="9" fontWeight="bold" fill={Number.isFinite(coef) ? '#FFFFFF' : '#0F172A'}>
+                            {Number.isFinite(coef) ? coef.toFixed(2) : 'n/a'}
                           </text>
                         </g>
                       );
